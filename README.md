@@ -15,8 +15,7 @@ Unlike typical iced widgets, this library allows you to:
 
 - **Generic `Kit`**: UIKit can be generic over your application `Message`.
 - **Runtime theme switching**: Choose different themes at runtime using a simple strategy.
-- **Message passthrough**: Send application-specific messages directly from UIKit buttons and widgets.
-- **Zero-cost caching**: Use iced `Component`s to cache widget state and reduce layout/text shaping overhead.
+- **Message passthrough**: Send application-specific messages directly from UIKit widgets.
 - **Extensible**: Easily implement new themes without changing your application logic.
 
 ---
@@ -31,7 +30,7 @@ Todo list tracks implemented components and features from a [web version of Aura
 - [ ] Dropdown
 - [ ] Grid
 - [ ] Indication
-- [ ] Input
+- [x] Input
 - [ ] Progress
 - [ ] Section
 - [ ] Separator
