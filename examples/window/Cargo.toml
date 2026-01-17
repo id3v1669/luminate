@@ -1,0 +1,14 @@
+[package]
+name = "window"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+iced = { workspace = true }
+iced_auravibe = { path = "../../uikit" }
+
+[lints]
+workspace = true

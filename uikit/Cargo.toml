@@ -1,0 +1,16 @@
+[package]
+name = "iced_auravibe"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+iced = { workspace = true }
+
+[features]
+debug = ["iced/hot"]
+
+[lints]
+workspace = true
