@@ -1,7 +1,17 @@
-use iced::{Color, Element, Task, theme};
-use iced_auravibe::{Kit, kit::sonata::Sonata, mapper::UIMapper};
+use iced::{
+    Color, Element, Font, Padding, Settings, Task, font, theme,
+    widget::{button, column, text},
+};
+use iced_auravibe::{
+    Kit,
+    definition::button::props::ButtonHierarchy,
+    kit::sonata::{Sonata, components::spring_layer::spring_layer},
+    mapper::UIMapper,
+};
 
 fn main() -> iced::Result {
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     iced::application(move || Data::new(Sonata::new()), Data::update, Data::view)
         .style(|_, _| theme::Style {
             background_color: Color::WHITE,
@@ -12,10 +22,14 @@ fn main() -> iced::Result {
 
 struct Data {
     uikit: Box<dyn for<'a> Kit<'a, Message>>,
+    input_content: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {}
+pub enum Message {
+    Pressed,
+    InputContentChanged(String),
+}
 
 impl Data {
     fn new<K>(kit: K) -> (Self, Task<Message>)
@@ -25,12 +39,20 @@ impl Data {
         (
             Self {
                 uikit: Box::new(kit),
+                input_content: String::new(),
             },
             Task::none(),
         )
     }
 
-    fn update(&mut self, _: Message) -> Task<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Pressed => println!("Pressed"),
+            Message::InputContentChanged(content) => {
+                self.input_content = content;
+            }
+        }
+
         Task::none()
     }
 
@@ -41,6 +63,11 @@ impl Data {
     fn view(&self) -> Element<'_, Message> {
         let kit = self.kit_mapper();
 
-        kit.window("New Window").into()
+        column![spring_layer(
+            kit.button("New Button").on_press(Message::Pressed)
+        ),]
+        .padding(Padding::from(15))
+        .spacing(15)
+        .into()
     }
 }

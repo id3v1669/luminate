@@ -27,8 +27,8 @@ where
         }
     }
 
-    pub fn button(&self, label: impl Into<String>, on_press: Message) -> UiButton<'a, Message> {
-        UiButton::new(&self.kit, label, on_press)
+    pub fn button(&self, label: impl Into<String>) -> UiButton<'a, Message> {
+        UiButton::new(&self.kit, label)
     }
 
     pub fn input(&self, placeholder: &'a str, value: &'a str) -> UiInput<'a, Message> {

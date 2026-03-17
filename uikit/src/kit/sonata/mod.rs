@@ -5,11 +5,9 @@ use iced::Element;
 use crate::Kit;
 use crate::definition::button::UiButton;
 
-pub mod button;
-// pub mod focusabe_container;
-pub mod input;
-pub mod text;
-pub mod window;
+pub mod components;
+pub mod palette;
+pub mod utils;
 
 #[derive(Clone)]
 pub struct Sonata<Message> {

@@ -12,7 +12,7 @@ pub struct UiButton<'a, Message> {
     pub props: UiButtonProperties,
     pub width: Length,
 
-    pub on_press: Message,
+    pub on_press: Option<Message>,
     pub kit: &'a KitObj<Message>,
 }
 
@@ -20,14 +20,19 @@ impl<'a, Message> UiButton<'a, Message>
 where
     Message: Clone + 'static,
 {
-    pub fn new(kit: &'a KitObj<Message>, label: impl Into<String>, on_press: Message) -> Self {
+    pub fn new(kit: &'a KitObj<Message>, label: impl Into<String>) -> Self {
         UiButton {
             label: label.into(),
-            on_press,
+            on_press: None,
             props: UiButtonProperties::default(),
             width: Length::Shrink,
             kit,
         }
+    }
+
+    pub fn on_press(mut self, event: Message) -> Self {
+        self.on_press = Some(event);
+        self
     }
 
     pub fn width(mut self, width: Length) -> Self {

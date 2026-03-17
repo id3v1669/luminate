@@ -30,11 +30,12 @@ impl Default for UiButtonProperties {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ButtonHierarchy {
     Primary,
     Secondary,
-    // Tertiary,
+    Tertiary,
+    Destructive,
 }
 
 #[derive(Clone)]
