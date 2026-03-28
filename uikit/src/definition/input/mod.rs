@@ -9,6 +9,8 @@ pub struct UiInput<'a, Message> {
     pub placeholder: &'a str,
     pub label: Option<&'a str>,
     pub hint: Option<&'a str>,
+    pub is_error: Option<bool>,
+    pub error_msg: Option<&'a str>,
 
     pub on_input: Option<Box<dyn Fn(String) -> Message + 'static>>,
     pub kit: &'a KitObj<Message>,
@@ -24,6 +26,9 @@ where
             placeholder,
             label: None,
             hint: None,
+            is_error: None,
+            error_msg: None,
+
             on_input: None,
             kit,
         }
@@ -41,6 +46,16 @@ where
 
     pub fn hint(mut self, hint: &'a str) -> Self {
         self.hint = Some(hint);
+        self
+    }
+
+    pub fn is_error(mut self, state: bool) -> Self {
+        self.is_error = Some(state);
+        self
+    }
+
+    pub fn error_msg(mut self, msg: &'a str) -> Self {
+        self.error_msg = Some(msg);
         self
     }
 }

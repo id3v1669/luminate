@@ -31,21 +31,21 @@ impl<Message: Clone + 'static> Default for Sonata<Message> {
 }
 
 impl<'a, Message: Clone + 'static> Kit<'a, Message> for Sonata<Message> {
-    fn constr_button(&self, params: UiButton<Message>) -> Element<'static, Message> {
+    fn constr_button(&self, params: UiButton<'a, Message>) -> Element<'a, Message> {
         Self::button(&self, params)
     }
 
     fn constr_input(
         &self,
-        input: crate::definition::input::UiInput<Message>,
-    ) -> Element<'static, Message> {
+        input: crate::definition::input::UiInput<'a, Message>,
+    ) -> Element<'a, Message> {
         Self::input(&self, input)
     }
 
-    fn constr_window(
-        &self,
-        window: crate::definition::window::UiWindow<'a, Message>,
-    ) -> Element<'a, Message> {
-        self.window(window)
-    }
+    // fn constr_window(
+    //     &self,
+    //     window: crate::definition::window::UiWindow<'a, Message>,
+    // ) -> Element<'a, Message> {
+    //     self.window(window)
+    // }
 }

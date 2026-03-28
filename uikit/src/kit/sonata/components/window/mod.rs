@@ -6,7 +6,7 @@ use iced::{
     },
 };
 
-use crate::{definition::window::UiWindow, kit::sonata::Sonata};
+use crate::kit::sonata::Sonata;
 
 mod vars;
 mod widget;

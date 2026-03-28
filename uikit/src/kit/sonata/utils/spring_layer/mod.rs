@@ -3,7 +3,7 @@ mod spring;
 use iced::{
     Element, Event, Length, Rectangle, Size, Transformation, Vector,
     advanced::{
-        Clipboard, Layout, Shell, Widget, layout, mouse, overlay, renderer,
+        Layout, Shell, Widget, layout, mouse, overlay, renderer,
         widget::{Operation, Tree, tree},
     },
     time::Instant,
@@ -213,7 +213,6 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         renderer: &Renderer,
-        clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
@@ -245,7 +244,6 @@ where
                 child_layout,
                 cursor,
                 renderer,
-                clipboard,
                 shell,
                 viewport,
             );
@@ -274,7 +272,6 @@ where
             child_layout,
             cursor,
             renderer,
-            clipboard,
             shell,
             viewport,
         );

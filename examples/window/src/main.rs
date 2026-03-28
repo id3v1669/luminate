@@ -1,17 +1,10 @@
 use iced::{
-    Color, Element, Font, Padding, Settings, Task, font, theme,
-    widget::{button, column, text},
+    Color, Element, Length, Padding, Task, theme,
+    widget::{column, svg},
 };
-use iced_auravibe::{
-    Kit,
-    definition::button::props::ButtonHierarchy,
-    kit::sonata::{Sonata, components::spring_layer::spring_layer},
-    mapper::UIMapper,
-};
+use iced_auravibe::{Kit, kit::sonata::Sonata, mapper::UIMapper};
 
 fn main() -> iced::Result {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
     iced::application(move || Data::new(Sonata::new()), Data::update, Data::view)
         .style(|_, _| theme::Style {
             background_color: Color::WHITE,
@@ -23,6 +16,7 @@ fn main() -> iced::Result {
 struct Data {
     uikit: Box<dyn for<'a> Kit<'a, Message>>,
     input_content: String,
+    input_error: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +34,7 @@ impl Data {
             Self {
                 uikit: Box::new(kit),
                 input_content: String::new(),
+                input_error: false,
             },
             Task::none(),
         )
@@ -47,7 +42,7 @@ impl Data {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Pressed => println!("Pressed"),
+            Message::Pressed => self.input_error = !self.input_error,
             Message::InputContentChanged(content) => {
                 self.input_content = content;
             }
@@ -62,10 +57,22 @@ impl Data {
 
     fn view(&self) -> Element<'_, Message> {
         let kit = self.kit_mapper();
+        let icon_str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/plus.svg");
 
-        column![spring_layer(
-            kit.button("New Button").on_press(Message::Pressed)
-        ),]
+        column![
+            svg(icon_str),
+            kit.button()
+                .label("Toggle")
+                .icon(icon_str)
+                .on_press(Message::Pressed),
+            kit.input("Placeholder", &self.input_content)
+                .on_input(Message::InputContentChanged)
+                .hint("Hint for the user")
+                .is_error(self.input_error)
+                .error_msg("Value is wrong"),
+        ]
+        .height(Length::Fill)
+        .width(Length::Fill)
         .padding(Padding::from(15))
         .spacing(15)
         .into()

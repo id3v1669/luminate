@@ -1,4 +1,4 @@
-use iced::{Element, Length};
+use iced::{Element, Length, Theme, advanced::svg, widget::Svg};
 
 use crate::{
     KitObj,
@@ -8,7 +8,7 @@ use crate::{
 pub mod props;
 
 pub struct UiButton<'a, Message> {
-    pub label: String,
+    pub content: Content<'a>,
     pub props: UiButtonProperties,
     pub width: Length,
 
@@ -16,13 +16,47 @@ pub struct UiButton<'a, Message> {
     pub kit: &'a KitObj<Message>,
 }
 
+type Label<'a> = &'a str;
+type SvgSource<'a> = Svg<'a, Theme>;
+
+pub enum Content<'a> {
+    Text(Label<'a>),
+    Icon(SvgSource<'a>),
+    Combined {
+        icon: SvgSource<'a>,
+        text: Label<'a>,
+    },
+}
+
+impl<'a> Content<'a> {
+    pub fn add_text(mut self, text: Label<'a>) -> Self {
+        match self {
+            Content::Icon(i) => self = Content::Combined { icon: i, text },
+            Content::Combined { icon, .. } => self = Content::Combined { icon, text },
+            _ => self = Content::Text(text),
+        };
+
+        self
+    }
+
+    pub fn add_icon(mut self, icon: SvgSource<'a>) -> Self {
+        match self {
+            Content::Text(text) => self = Content::Combined { icon, text },
+            Content::Combined { text, .. } => self = Content::Combined { icon, text },
+            _ => self = Content::Icon(icon),
+        }
+
+        self
+    }
+}
+
 impl<'a, Message> UiButton<'a, Message>
 where
     Message: Clone + 'static,
 {
-    pub fn new(kit: &'a KitObj<Message>, label: impl Into<String>) -> Self {
+    pub fn new(kit: &'a KitObj<Message>) -> Self {
         UiButton {
-            label: label.into(),
+            content: Content::Text(""),
             on_press: None,
             props: UiButtonProperties::default(),
             width: Length::Shrink,
@@ -47,6 +81,17 @@ where
 
     pub fn hier(mut self, hier: ButtonHierarchy) -> Self {
         self.props.set_hier(hier);
+        self
+    }
+
+    pub fn label(mut self, text: Label<'a>) -> Self {
+        self.content = self.content.add_text(text);
+        self
+    }
+
+    pub fn icon(mut self, handle: impl Into<svg::Handle>) -> Self {
+        let icon = Svg::new(handle);
+        self.content = self.content.add_icon(icon);
         self
     }
 }

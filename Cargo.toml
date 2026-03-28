@@ -6,19 +6,20 @@ members = [
 ]
 
 [workspace.dependencies]
-iced = { version = "0.14.0", default-features = false, features = [
+iced = { git = "https://github.com/iced-rs/iced", rev = "4f02d83989567f9eb0af6382c5f766c43a640f58", default-features = false, features = [
     "wgpu",
     "advanced",
     "canvas",
     "image",
-    "crisp",
     "web-colors",
     "thread-pool",
     "linux-theme-detection",
     "x11",
     "wayland",
     "webgl",
-    "fira-sans"
+    "fira-sans",
+    "tiny-skia",
+    "svg"
 ] }
 
 [workspace.package]

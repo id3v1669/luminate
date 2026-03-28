@@ -62,3 +62,11 @@ pub const fn alpha_blend(background: Color, foreground: Color) -> Color {
         a: out_a,
     }
 }
+
+pub const fn outer_radius_calc(inner_r: f32, padding: f32) -> f32 {
+    inner_r + padding
+}
+
+pub const fn inner_radius_calc(outer_r: f32, padding: f32) -> f32 {
+    outer_r - padding
+}

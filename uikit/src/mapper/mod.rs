@@ -1,10 +1,8 @@
 use std::marker::PhantomData;
 
-use iced::widget::button;
-
 use crate::{
     KitObj,
-    definition::{button::UiButton, input::UiInput, window::UiWindow},
+    definition::{button::UiButton, input::UiInput},
 };
 
 // pub mod button;
@@ -27,17 +25,17 @@ where
         }
     }
 
-    pub fn button(&self, label: impl Into<String>) -> UiButton<'a, Message> {
-        UiButton::new(&self.kit, label)
+    pub fn button(&self) -> UiButton<'a, Message> {
+        UiButton::new(self.kit)
     }
 
     pub fn input(&self, placeholder: &'a str, value: &'a str) -> UiInput<'a, Message> {
-        UiInput::new(&self.kit, placeholder, value)
+        UiInput::new(self.kit, placeholder, value)
     }
 
-    pub fn window(&self, label: impl Into<String>) -> UiWindow<'a, Message> {
-        UiWindow::new(&self.kit, label.into(), button("asdasd").into())
-    }
+    // pub fn window(&self, label: impl Into<String>) -> UiWindow<'a, Message> {
+    //     UiWindow::new(self.kit, label.into(), button("asdasd").into())
+    // }
 
     // pub fn build(&self, btn: UiButton<Message>) -> Element<'static, Message> {
     //     self.kit.constr_button(btn)

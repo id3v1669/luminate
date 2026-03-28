@@ -20,7 +20,7 @@ impl<'a> display::DisplayStyle {
         &display::TOKENS[self as usize]
     }
 
-    pub fn build_font(self) -> Font {
+    pub const fn build_font(self) -> Font {
         let token = Self::token(self);
 
         Font {
@@ -31,7 +31,7 @@ impl<'a> display::DisplayStyle {
         }
     }
 
-    pub fn get_size(self) -> f32 {
+    pub const fn get_size(self) -> f32 {
         let token = Self::token(self);
         token.size
     }
@@ -42,7 +42,7 @@ impl<'a> text::TextStyle {
         &text::TOKENS[self as usize]
     }
 
-    pub fn build_font(self) -> Font {
+    pub const fn build_font(self) -> Font {
         let token = Self::token(self);
 
         Font {
@@ -53,7 +53,7 @@ impl<'a> text::TextStyle {
         }
     }
 
-    pub fn get_size(self) -> f32 {
+    pub const fn get_size(self) -> f32 {
         let token = Self::token(self);
         token.size
     }
