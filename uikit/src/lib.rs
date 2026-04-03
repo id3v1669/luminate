@@ -1,10 +1,14 @@
 use iced::Element;
 
-use crate::definition::{button::UiButton, input::UiInput};
+use crate::definition::{button::UiButton, input::UiInput, sidebar::UiSidebar};
 
 pub mod definition;
 pub mod kit;
 pub mod mapper;
+
+pub trait KitProvider: Clone + 'static {
+    fn provide<M: Clone + Send + 'static>(&self) -> Box<dyn for<'a> Kit<'a, M>>;
+}
 
 pub type KitObj<Message> = Box<dyn for<'a> Kit<'a, Message>>;
 
@@ -15,4 +19,5 @@ pub trait Kit<'a, Message: Clone + 'static> {
 
     // Complicated
     // fn constr_window(&self, window: UiWindow<'a, Message>) -> Element<'a, Message>;
+    fn constr_sidebar(&self, sidebar: UiSidebar<'a, Message>) -> Element<'a, Message>;
 }

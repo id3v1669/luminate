@@ -33,5 +33,5 @@ pub const TOOLTIP_ARROW: &str = r##"
 
 pub const SIZE_TOOLTIP_ARROW_WIDTH: f32 = 11.0;
 pub const SIZE_TOOLTIP_ARROW_HEIGHT: f32 = 5.5;
-pub const SIZE_TOOLTIP_ARROW_RIGHT_OFFSET: f32 = 9.0;
+pub const SIZE_TOOLTIP_ARROW_RIGHT_OFFSET: f32 = 11.0;
 pub const SIZE_TOOLTIP_GAP: f32 = 5.5;

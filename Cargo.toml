@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.dependencies]
-iced = { git = "https://github.com/iced-rs/iced", rev = "4f02d83989567f9eb0af6382c5f766c43a640f58", default-features = false, features = [
+iced = { git = "https://github.com/iced-rs/iced", rev = "bc3a12c6840430a01b7300b21e5543d3c6e7a82e", default-features = false, features = [
     "wgpu",
     "advanced",
     "canvas",

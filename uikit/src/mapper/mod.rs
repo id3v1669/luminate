@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
 
+use iced::Element;
+
 use crate::{
     KitObj,
-    definition::{button::UiButton, input::UiInput},
+    definition::{button::UiButton, input::UiInput, sidebar::UiSidebar},
 };
 
 // pub mod button;
@@ -31,6 +33,10 @@ where
 
     pub fn input(&self, placeholder: &'a str, value: &'a str) -> UiInput<'a, Message> {
         UiInput::new(self.kit, placeholder, value)
+    }
+
+    pub fn sidebar(&self, child: Vec<Element<'a, Message>>) -> UiSidebar<'a, Message> {
+        UiSidebar::new(self.kit, child)
     }
 
     // pub fn window(&self, label: impl Into<String>) -> UiWindow<'a, Message> {

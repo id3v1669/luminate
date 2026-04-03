@@ -2,12 +2,21 @@ use std::marker::PhantomData;
 
 use iced::Element;
 
-use crate::Kit;
 use crate::definition::button::UiButton;
+use crate::{Kit, KitProvider};
 
 pub mod components;
 pub mod palette;
 pub mod utils;
+
+#[derive(Clone)]
+pub struct SonataProvider;
+
+impl KitProvider for SonataProvider {
+    fn provide<M: Clone + 'static>(&self) -> Box<dyn for<'a> Kit<'a, M>> {
+        Box::new(Sonata::new())
+    }
+}
 
 #[derive(Clone)]
 pub struct Sonata<Message> {
@@ -40,6 +49,13 @@ impl<'a, Message: Clone + 'static> Kit<'a, Message> for Sonata<Message> {
         input: crate::definition::input::UiInput<'a, Message>,
     ) -> Element<'a, Message> {
         Self::input(&self, input)
+    }
+
+    fn constr_sidebar(
+        &self,
+        sidebar: crate::definition::sidebar::UiSidebar<'a, Message>,
+    ) -> Element<'a, Message> {
+        Self::sidebar(&self, sidebar)
     }
 
     // fn constr_window(

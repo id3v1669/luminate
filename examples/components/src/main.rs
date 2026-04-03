@@ -28,8 +28,7 @@ struct AppData {
 
 #[derive(Clone)]
 pub enum Message {
-    IncreaseMessage,
-    DecreaseMessage,
+    Counter(number::Message),
 }
 
 impl AppData {
@@ -48,11 +47,8 @@ impl AppData {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::IncreaseMessage => {
-                let _ = self.counter.update(number::Message::Increase);
-            }
-            Message::DecreaseMessage => {
-                let _ = self.counter.update(number::Message::Decrease);
+            Message::Counter(msg) => {
+                let _ = self.counter.update(msg);
             }
         }
 
@@ -68,9 +64,13 @@ impl AppData {
 
         container(
             column![
-                kit.button().label("+").on_press(Message::IncreaseMessage),
+                kit.button()
+                    .label("+")
+                    .on_press(Message::Counter(number::Message::Increase)),
                 self.counter.view().map(|_| unreachable!()),
-                kit.button().label("-").on_press(Message::DecreaseMessage),
+                kit.button()
+                    .label("-")
+                    .on_press(Message::Counter(number::Message::Decrease)),
             ]
             .align_x(Alignment::Center)
             .spacing(10),
