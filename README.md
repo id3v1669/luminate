@@ -39,7 +39,7 @@ Todo list tracks implemented components and features from the [web version of Au
 - [ ] Progress
 - [ ] Section
 - [ ] Separator
-- [ ] Sidebar
+- [x] Sidebar
 - [ ] Spinner
 - [ ] Window
 
@@ -47,6 +47,7 @@ Todo list tracks implemented components and features from the [web version of Au
 
 - [ ] Animations
     - [x] Physically correct spring implementation
+- [x] Router (inside `overview` example package)
 
 ---
 
