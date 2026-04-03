@@ -46,12 +46,14 @@ Todo list tracks implemented components and features from the [web version of Au
 ### Available Features
 
 - [ ] Animations
-    - [x] Physically correct spring implementation
-- [x] Router (inside `overview` example package)
+    - [x] Physically correct RK4 spring implementation
+- [x] Router with `Message` encapsulation (inside `overview` example package)
 
 ---
 
 ## Example
+
+### Build a simple interface using some UIKit widgets
 
 1. Reserve UI Kit cell in application state
 
@@ -62,7 +64,16 @@ struct Data {
 }
 ```
 
-2. Write a `new()` implementation:
+2. Define a `Message` enum:
+
+```rust
+enum Message {
+    Pressed,
+    InputChanged(String)
+}
+```
+
+3. Write a `new()` implementation:
 
 ```rust
 impl Data {
@@ -78,12 +89,10 @@ impl Data {
             Task::none(),
         )
     }
-
-    // update(), view() functions...
 }
 ```
 
-3. Write a mapper implementation inside `Data` for clean building API:
+4. Write a mapper implementation inside `Data` for clean building API:
 
 ```rust
 impl Data {
@@ -92,12 +101,10 @@ impl Data {
     fn kit_mapper(&self) -> UIMapper<'_, Message> {
         UIMapper::new(&self.uikit)
     }
-
-    // update(), view() functions...
 }
 ```
 
-4. Pass chosen default UI Kit on application start:
+5. Pass chosen default UI Kit on application start:
 
 ```rust
 fn main() -> iced::Result {
@@ -106,18 +113,46 @@ fn main() -> iced::Result {
 }
 ```
 
-5. Build interface using simplest `button` widget:
+6. Build interface using simplest `button` and `input` widget:
 
 ```rust
 impl Data {
-    // new(), update(), kit_mapper() functions...
+    // new(), kit_mapper() functions...
 
     fn view(&self) -> Element<'_, Message> {
         let kit = self.kit_mapper();
 
-        kit.button().label("Action").on_press(Message::Pressed).into()
+        column![
+            kit.button().label("Action").on_press(Message::Pressed),
+            kit.input("Placeholder", &self.input_content).on_input(Message::InputChanged)
+        ]
     }
 }
+```
+
+7. Define logic for these widgets:
+
+```rust
+impl Data {
+    // new(), kit_mapper() functions...
+
+    fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Pressed => println!("Button pressed!"),
+            Message::InputChanged(val) => self.input_content = val,
+        }
+
+        Task::none()
+    }
+
+    // view() function...
+}
+```
+
+8. Run your application
+
+```sh
+cargo r
 ```
 
 ---
