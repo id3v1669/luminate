@@ -1,0 +1,85 @@
+# Changelog
+
+All notable changes to the four crates of this workspace are documented here.
+The crates are released together with the same version. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Semantic Versioning](https://semver.org/). Before 1.0, minor versions may
+break the API; every break is listed under **Changed** or **Removed**.
+
+## [Unreleased]
+
+The first release. What each crate provides:
+
+### Changed
+
+- Licensed the workspace under LGPL 2.1 or later. The bundled Inter font
+  remains under the SIL Open Font License 1.1.
+
+### Added
+
+#### iced_animate
+
+- `Motion`: a tree-external animation engine with keyed tracks (`MotionKey`,
+  `key!`), `to`, `to_set`, `play`, `enter`, `retire`, `presence`, `get`,
+  `end_build`, `collect`, `track_count`.
+- `Anim<T>` handles resolved inside widgets; `Animatable` for `f32`, `Pixels`,
+  `Vector`, `Point`, `Size`, `Rectangle`, `Radians`, `Color`, `Padding`,
+  `Radius` (`MAX_COMPONENTS` = 4); `AnimLength`; `motion_set!` / `MotionSet`.
+- Curves: closed-form springs (`SpringParams::new(bounce, duration)`) and
+  eases (`Easing`), `Curve::delayed`; presets `curves::{SMOOTH, QUICK, BOUNCY,
+  STRUCTURAL, FADE, COLLAPSE}`.
+- `Tier::{Composite, Paint, Layout}` invalidation per track; `TickStatus`.
+- Widgets `widget::{Shape, Sized, Host}` with `shape()`, `sized()`, `host()`
+  (under `widget` only; the engine and value types live at the root).
+- Depends on `iced_core` and `log` only.
+
+#### iced_texture_cache
+
+- `Cached` / `cached()`: records a subtree into a texture and composites it
+  with animated `translate`, `scale`, `opacity`; `supersample`,
+  `supersample_in_motion`, `pixel_snap(PixelSnap::{Auto, Always, Never,
+  LayoutOnly})`, `auto_invalidate`; automatic invalidation when the content
+  reacts, nested caches propagate to their ancestors.
+- `Pager` / `pager()`: a sliding page stack with per-page textures and
+  interpolated height (`current`, `motion`, `curve`, `width`, `max_height`).
+- `TextureCache` handles with `id`, `invalidate`, `is_invalidated`,
+  `record_count`, `generation`; `TextureCacheId`.
+- `Renderer` and `Compositor` for wgpu and tiny-skia (optional features, at
+  least one required), the `Element` alias, `Backend`, and the open
+  `TextureRenderer` trait (`record` → `Record::{Fresh, Reused, Uncacheable}`,
+  `draw_cached`).
+- Surface-format selection that never picks a float format for web colours.
+- Re-exports `iced_animate`.
+
+#### iced_page_router
+
+- `Router<Context, Theme, Renderer>` with `add`, `navigate`, `navigate_with`,
+  `navigate_index`, `replace`, `back`, `forward`, bounded deduplicating history
+  (`history_len`), `mouse_navigation`, `pages()` → `PageInfo`, typed `page` /
+  `page_mut` / `message`, `view`, `update`, `subscription`.
+- `Page` trait with `Lifecycle::{Drop, Suspend, Resident}`, `on_enter`,
+  `on_navigate(options)`, `on_suspend`, `on_resume`, `into_snapshot`,
+  `restore`, `background_subscription`.
+- `Action` (`none`, `task`, `navigate`, `navigate_with`, `back`, `forward`,
+  `replace`, `and_task`, `and_navigate`), `Navigation`, `RouteMessage`,
+  `PageMessage`, `Payload`, `NavigationError`.
+- `Registry` keyed by `Key` types holding `Shared<T>` values.
+- Depends on `iced_core`, `iced_runtime` and `log` only.
+
+#### iced_luminate
+
+- `Luminate`: theme + motion engine; `host`, `button`, `input`, `sidebar`,
+  `card`, `pager`; `Luminate::fonts()`.
+- `descriptor::{Button, ButtonContent, ButtonHierarchy, ButtonSize, Input,
+  Sidebar, Axis, Card, Pager}` as plain data with builders.
+- `theme::Theme` (`LIGHT`, `DARK`) implementing `iced::theme::Base` and the
+  `Catalog`s of every widget the kit uses; token structs,
+  `palette::{Palette, ColorScale}`, `typography::{TextStyle, TextSize,
+  DisplaySize, TypographyTheme, styled_text, FONT, FAMILY}`; bundled Inter
+  (OFL-1.1) behind `bundled-font`.
+- Widgets `widget::{multi_border::MultiBorder, sidebar::Sidebar,
+  error_bubble::ErrorBubble}` with `multi_border()`, `sidebar()`,
+  `error_bubble()`; every item has one public path.
+- Re-exports `iced`, `iced_animate` (as `animate`), `iced_page_router` (as
+  `router`) and `iced_texture_cache` (as `texture`); `Element`, `Renderer`,
+  `Router` aliases.

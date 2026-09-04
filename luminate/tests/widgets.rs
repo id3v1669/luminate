@@ -1,0 +1,272 @@
+//! Kit widgets through `iced_test`: a custom focus probe and touch on
+//! `MultiBorder`, collapsed-vs-expanded sidebar geometry on both axes, and
+//! the error bubble over a `pick_list` and at the right edge.
+
+use std::cell::Cell;
+use std::rc::Rc;
+
+use iced_luminate::descriptor::{Axis, Button, Sidebar};
+use iced_luminate::iced::advanced::Renderer as _;
+use iced_luminate::iced::advanced::clipboard;
+use iced_luminate::iced::advanced::renderer::{self, Headless};
+use iced_luminate::iced::time::Instant;
+use iced_luminate::iced::widget::{button, container, pick_list, row, space, text, text_input};
+use iced_luminate::iced::{
+    Color, Event, Length, Padding, Point, Rectangle, Settings, Size, mouse, touch, window,
+};
+use iced_luminate::texture::testing::headless_tiny_skia;
+use iced_luminate::widget::error_bubble::error_bubble;
+use iced_luminate::widget::multi_border::{Focus, Status, Style, multi_border};
+use iced_luminate::{Element, Luminate, Renderer, Theme};
+use iced_test::Simulator;
+use iced_test::runtime::user_interface::{self, UserInterface};
+use iced_test::selector;
+
+#[derive(Debug, Clone, PartialEq)]
+enum Message {
+    Picked(&'static str),
+    Edited(String),
+}
+
+type Plain<'a> = iced_luminate::iced::Element<'a, Message, iced_luminate::iced::Theme, Renderer>;
+
+fn plain(
+    root: Plain<'_>,
+    size: Size,
+) -> Simulator<'_, Message, iced_luminate::iced::Theme, Renderer> {
+    Simulator::with_size(Settings::default(), size, root)
+}
+
+fn kit(root: Element<'_, Message>, size: Size) -> Simulator<'_, Message, Theme, Renderer> {
+    Simulator::with_size(Settings::default(), size, root)
+}
+
+fn redraw() -> Event {
+    Event::Window(window::Event::RedrawRequested(Instant::now()))
+}
+
+fn recording(
+    status: Rc<Cell<Status>>,
+    content: Plain<'static>,
+    focus: Focus<'static>,
+) -> Plain<'static> {
+    multi_border(content)
+        .focus(focus)
+        .style(move |_, s| {
+            status.set(s);
+            Style::default()
+        })
+        .into()
+}
+
+#[test]
+fn a_custom_focus_probe_drives_the_focused_state_without_a_click() {
+    let status = Rc::new(Cell::new(Status::default()));
+    let root = recording(
+        status.clone(),
+        text_input("type", "").on_input(Message::Edited).into(),
+        Focus::Custom(Box::new(|_| true)),
+    );
+    let mut ui = plain(root, Size::new(300.0, 100.0));
+    let _ = ui.simulate([redraw()]);
+    let _ = ui
+        .snapshot(&iced_luminate::iced::Theme::Light)
+        .expect("draws");
+    assert!(status.get().is_focused, "{:?}", status.get());
+}
+
+#[test]
+fn a_touch_press_inside_focuses() {
+    let status = Rc::new(Cell::new(Status::default()));
+    let root = recording(status.clone(), button(text("tap")).into(), Focus::Click);
+    let mut ui = plain(root, Size::new(300.0, 100.0));
+    let centre = ui.find("tap").expect("on screen").bounds().center();
+    ui.point_at(centre);
+    let _ = ui.simulate([Event::Touch(touch::Event::FingerPressed {
+        id: touch::Finger(0),
+        position: centre,
+    })]);
+    let _ = ui
+        .snapshot(&iced_luminate::iced::Theme::Light)
+        .expect("draws");
+    assert!(status.get().is_focused, "{:?}", status.get());
+}
+
+fn sidebar_bounds(axis: Axis, collapsed: bool) -> (Rectangle, Rectangle) {
+    let luminate = Luminate::new();
+    let items = [luminate.button(Button::new("item"))];
+    let root: Element<'_, Message> = container(
+        luminate.sidebar(
+            Sidebar::new(items)
+                .axis(axis)
+                .collapsed(collapsed)
+                .show_toggle(true)
+                .width(Length::Shrink)
+                .height(Length::Shrink),
+        ),
+    )
+    .id("sidebar")
+    .into();
+    let mut ui = kit(luminate.host(root), Size::new(400.0, 400.0));
+    let _ = ui.simulate([redraw()]);
+    let sidebar = ui.find(selector::id("sidebar")).expect("laid out").bounds();
+    let item = ui.find("item").expect("laid out").bounds();
+    (sidebar, item)
+}
+
+#[test]
+fn a_vertical_sidebar_collapses_its_width_and_keeps_children_below_the_header() {
+    let (open, item_open) = sidebar_bounds(Axis::Vertical, false);
+    let (closed, _) = sidebar_bounds(Axis::Vertical, true);
+    assert!(
+        closed.width < open.width,
+        "collapsed {closed:?} vs open {open:?}"
+    );
+    assert!(
+        item_open.y > open.y,
+        "the header row comes first: {item_open:?} in {open:?}"
+    );
+}
+
+#[test]
+fn a_horizontal_sidebar_collapses_its_height_and_keeps_children_right_of_the_header() {
+    let (open, item_open) = sidebar_bounds(Axis::Horizontal, false);
+    let (closed, _) = sidebar_bounds(Axis::Horizontal, true);
+    assert!(
+        closed.height < open.height,
+        "collapsed {closed:?} vs open {open:?}"
+    );
+    assert!(
+        item_open.x > open.x,
+        "the header column comes first: {item_open:?} in {open:?}"
+    );
+}
+
+/// Draws `root` under `iced::Theme::Light` on the software backend and
+/// returns the RGBA pixels.
+fn render(root: Plain<'_>, size: Size) -> Vec<u8> {
+    let mut renderer = headless_tiny_skia();
+    let mut ui: UserInterface<'_, Message, iced_luminate::iced::Theme, Renderer> =
+        UserInterface::build(root, size, user_interface::Cache::default(), &mut renderer);
+    let mut messages = Vec::new();
+    let _ = ui.update(
+        &[redraw()],
+        mouse::Cursor::Unavailable,
+        &mut renderer,
+        &mut clipboard::Null,
+        &mut messages,
+    );
+    renderer.reset(Rectangle::with_size(size));
+    ui.draw(
+        &mut renderer,
+        &iced_luminate::iced::Theme::Light,
+        &renderer::Style {
+            text_color: Color::BLACK,
+        },
+        mouse::Cursor::Unavailable,
+    );
+    renderer.screenshot(
+        Size::new(size.width as u32, size.height as u32),
+        1.0,
+        Color::WHITE,
+    )
+}
+
+/// The bubble fill under `iced::Theme::Light`, as the compositor writes it.
+fn bubble_fill() -> [u8; 3] {
+    let color = iced_luminate::iced::Theme::Light
+        .extended_palette()
+        .danger
+        .weak
+        .color;
+    let [r, g, b, _] = color.into_rgba8();
+    [r, g, b]
+}
+
+/// Bounding box `(min_x, max_x, min_y, max_y)` of the pixels painted in
+/// `fill`.
+fn extent(rgba: &[u8], width: usize, fill: [u8; 3]) -> Option<(usize, usize, usize, usize)> {
+    let mut span: Option<(usize, usize, usize, usize)> = None;
+    for (i, px) in rgba.chunks_exact(4).enumerate() {
+        let close = px[..3].iter().zip(fill).all(|(a, b)| a.abs_diff(b) <= 2);
+        if close {
+            let (x, y) = (i % width, i / width);
+            span = Some(span.map_or((x, x, y, y), |(l, r, t, b)| {
+                (l.min(x), r.max(x), t.min(y), b.max(y))
+            }));
+        }
+    }
+    span
+}
+
+fn bubbled<'a>(padding: Padding) -> Plain<'a> {
+    container(error_bubble(
+        pick_list(["beta"], None::<&'static str>, Message::Picked),
+        Some("something is wrong"),
+    ))
+    .padding(padding)
+    .into()
+}
+
+#[test]
+fn the_bubble_over_a_pick_list_still_lets_the_menu_open() {
+    // `pick_list` reports no text to operations, so the test works from
+    // geometry: the list sits at (0, 100) and is ~31 px tall; its single
+    // option opens below it, spanning roughly y ∈ [131, 162]. The bubble
+    // itself draws a paragraph, not a text widget, so it is checked by pixel.
+    let top = Padding {
+        top: 100.0,
+        ..Padding::ZERO
+    };
+    let size = Size::new(400.0, 300.0);
+    let rgba = render(bubbled(top), size);
+    assert!(
+        extent(&rgba, 400, bubble_fill()).is_some(),
+        "the bubble is painted"
+    );
+
+    let mut ui = plain(bubbled(top), size);
+    let _ = ui.simulate([redraw()]);
+    ui.point_at(Point::new(10.0, 110.0));
+    let _ = ui.simulate(iced_test::simulator::click());
+    let _ = ui
+        .snapshot(&iced_luminate::iced::Theme::Light)
+        .expect("draws with the menu and the bubble");
+    let option = Point::new(10.0, 145.0);
+    ui.point_at(option);
+    let _ = ui.simulate([Event::Mouse(mouse::Event::CursorMoved { position: option })]);
+    let _ = ui.simulate(iced_test::simulator::click());
+    assert_eq!(
+        ui.into_messages().collect::<Vec<_>>(),
+        vec![Message::Picked("beta")],
+        "the menu opened through the bubble's overlay group"
+    );
+}
+
+#[test]
+fn the_bubble_is_clamped_to_the_right_edge() {
+    let view = || -> Plain<'_> {
+        row![
+            space().width(Length::Fill),
+            error_bubble(text("x"), Some("a rather long message that would overflow")),
+        ]
+        .padding(40)
+        .into()
+    };
+    // Room to spare: the bubble's natural size.
+    let wide = render(view(), Size::new(600.0, 200.0));
+    let (l, r, _, _) = extent(&wide, 600, bubble_fill()).expect("the bubble is painted");
+    let natural_width = r - l;
+    assert!(natural_width > 60, "a readable bubble: {natural_width} px");
+
+    // A viewport narrower than the anchor-relative position allows: the
+    // bubble stays inside it and re-wraps its message instead of being cut.
+    let narrow = render(view(), Size::new(260.0, 200.0));
+    let (l, r, _, _) = extent(&narrow, 260, bubble_fill()).expect("the bubble is painted");
+    assert!(r < 259, "clamped inside the viewport: {l}..={r}");
+    assert!(
+        r - l < natural_width,
+        "re-wrapped to the narrower viewport: {} vs {natural_width}",
+        r - l
+    );
+}

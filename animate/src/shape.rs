@@ -1,0 +1,417 @@
+//! A rectangle whose paint is resolved every frame.
+//!
+//! [`Sized`] covers the layout tier and a compositor-tier widget (such as
+//! `Cached` in `iced_texture_cache`) covers the compositor tier; this is the
+//! tier in between. Stock iced widgets take their colours
+//! from a style closure that runs while the view is being built, so a colour
+//! written there is a snapshot and freezes until the next rebuild, the same
+//! trap [`Sized`] exists to avoid for sizes.
+//!
+//! [`Shape`] reads its [`Anim`] values inside `draw`:
+//!
+//! ```
+//! use iced::border::Radius;
+//! use iced::Color;
+//! use iced_animate::widget::shape;
+//! use iced_animate::{curves::SMOOTH, key, Motion};
+//!
+//! let m = Motion::new();
+//! let hot = true;
+//! let _ = shape()
+//!     .width(48)
+//!     .height(48)
+//!     .fill(m.to(key!(), SMOOTH, if hot { Color::WHITE } else { Color::BLACK }))
+//!     .radius(m.to(key!(), SMOOTH, Radius::from(if hot { 24.0 } else { 6.0 })));
+//! ```
+//!
+//! It is deliberately just a rectangle. Anything richer is a component, and a
+//! component can compose this with [`Sized`] and a compositor-tier widget.
+//!
+//! [`Sized`]: crate::widget::Sized
+
+use iced_core::border::Radius;
+use iced_core::widget::{Tree, tree};
+use iced_core::{Background, Border, Color, Element, Length, Rectangle, Shadow, Size};
+use iced_core::{Layout, Widget, layout, mouse, renderer};
+
+use crate::{Anim, AnimLength, Tier};
+
+/// A bouncy spring may push a channel outside `0.0..=1.0`; the renderer's
+/// blending is undefined there.
+fn clamped_color(color: Color) -> Color {
+    Color {
+        r: color.r.clamp(0.0, 1.0),
+        g: color.g.clamp(0.0, 1.0),
+        b: color.b.clamp(0.0, 1.0),
+        a: color.a.clamp(0.0, 1.0),
+    }
+}
+
+/// A corner radius cannot be negative.
+fn non_negative_radius(radius: Radius) -> Radius {
+    Radius {
+        top_left: radius.top_left.max(0.0),
+        top_right: radius.top_right.max(0.0),
+        bottom_right: radius.bottom_right.max(0.0),
+        bottom_left: radius.bottom_left.max(0.0),
+    }
+}
+
+/// Creates a rectangle whose paint can be animated.
+///
+/// A shape has no intrinsic size: give it a `width` and `height`, or it
+/// measures 0 × 0 like `Space::new()`.
+///
+/// See the [`widget`](crate::widget) module for why a style closure cannot
+/// do this.
+#[must_use]
+pub fn shape() -> Shape {
+    Shape::new()
+}
+
+/// A rectangle whose fill, border and corner radius are resolved in `draw`.
+#[derive(Debug)]
+pub struct Shape {
+    width: AnimLength,
+    height: AnimLength,
+    fill: Anim<Color>,
+    radius: Anim<Radius>,
+    border_color: Anim<Color>,
+    border_width: Anim<f32>,
+}
+
+impl Default for Shape {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Shape {
+    /// Creates a transparent, borderless rectangle that takes no space until
+    /// given a [`width`](Self::width) and [`height`](Self::height).
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            width: AnimLength::Shrink,
+            height: AnimLength::Shrink,
+            fill: Anim::constant(Color::TRANSPARENT),
+            radius: Anim::constant(Radius::default()),
+            border_color: Anim::constant(Color::TRANSPARENT),
+            border_width: Anim::constant(0.0),
+        }
+    }
+
+    /// Sets the width, which may be animated.
+    #[must_use]
+    pub fn width(mut self, width: impl Into<AnimLength>) -> Self {
+        self.width = width.into();
+        self
+    }
+
+    /// Sets the height, which may be animated.
+    #[must_use]
+    pub fn height(mut self, height: impl Into<AnimLength>) -> Self {
+        self.height = height.into();
+        self
+    }
+
+    /// Sets the fill colour, which may be animated.
+    ///
+    /// Interpolation is component-wise in sRGB, including alpha, the same
+    /// thing CSS does, so a transition between two saturated hues passes
+    /// through a duller middle. Fade a whole subtree with a compositor-tier
+    /// opacity instead of animating alpha here when that is what you mean.
+    #[must_use]
+    pub fn fill(mut self, color: impl Into<Anim<Color>>) -> Self {
+        self.fill = color.into();
+        self
+    }
+
+    /// Sets the corner radius, which may be animated.
+    #[must_use]
+    pub fn radius(mut self, radius: impl Into<Anim<Radius>>) -> Self {
+        self.radius = radius.into();
+        self
+    }
+
+    /// Sets the border colour, which may be animated.
+    #[must_use]
+    pub fn border_color(mut self, color: impl Into<Anim<Color>>) -> Self {
+        self.border_color = color.into();
+        self
+    }
+
+    /// Sets the border width, which may be animated.
+    #[must_use]
+    pub fn border_width(mut self, width: impl Into<Anim<f32>>) -> Self {
+        self.border_width = width.into();
+        self
+    }
+
+    /// `true` while any of the shape's values is in motion.
+    #[must_use]
+    pub fn is_animating(&self) -> bool {
+        self.width.is_animating()
+            || self.height.is_animating()
+            || self.fill.is_animating()
+            || self.radius.is_animating()
+            || self.border_color.is_animating()
+            || self.border_width.is_animating()
+    }
+
+    /// Flags the paint values as needing a redraw, and the sizes a relayout.
+    ///
+    /// The distinction is the whole point of the tier system: a moving colour
+    /// asks the host for another frame, a moving width also invalidates the
+    /// layout.
+    fn mark_tiers(&self) {
+        self.width.mark_layout_tier();
+        self.height.mark_layout_tier();
+
+        self.fill.mark_tier(Tier::Paint);
+        self.border_color.mark_tier(Tier::Paint);
+        self.radius.mark_tier(Tier::Paint);
+        self.border_width.mark_tier(Tier::Paint);
+    }
+}
+
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for Shape
+where
+    Renderer: renderer::Renderer,
+{
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::stateless()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::None
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(self.width.resolve(), self.height.resolve())
+    }
+
+    fn size_hint(&self) -> Size<Length> {
+        // An animated axis passing through zero must not be advertised as
+        // `Fixed(0.0)`, that is the void hint, and the parent deletes the
+        // widget outright. See [`AnimLength::size_hint`].
+        Size::new(self.width.size_hint(), self.height.size_hint())
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut Tree,
+        _renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.mark_tiers();
+
+        layout::atomic(limits, self.width.resolve(), self.height.resolve())
+    }
+
+    fn draw(
+        &self,
+        _tree: &Tree,
+        renderer: &mut Renderer,
+        _theme: &Theme,
+        _style: &renderer::Style,
+        layout: Layout<'_>,
+        _cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        let bounds = layout.bounds();
+
+        if bounds.intersection(viewport).is_none() {
+            return;
+        }
+
+        // Every one of these is read *here*, not in the view. That is the
+        // whole contract: the value is fetched at the moment it is used, so
+        // the frame the engine just ticked is the frame that gets painted.
+        //
+        // Snapping to the pixel grid keeps a resting 1 px border as crisp as
+        // the container next to it (when iced's `crisp` feature is on), but
+        // snapping a moving edge makes it jitter, so it is off in motion.
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds,
+                border: Border {
+                    color: clamped_color(self.border_color.get()),
+                    width: self.border_width.get().max(0.0),
+                    radius: non_negative_radius(self.radius.get()),
+                },
+                shadow: Shadow::default(),
+                snap: !self.is_animating() && renderer::Quad::default().snap,
+            },
+            Background::Color(clamped_color(self.fill.get())),
+        );
+    }
+}
+
+impl<'a, Message, Theme, Renderer> From<Shape> for Element<'a, Message, Theme, Renderer>
+where
+    Renderer: renderer::Renderer + 'a,
+    Message: 'a,
+    Theme: 'a,
+{
+    fn from(shape: Shape) -> Self {
+        Element::new(shape)
+    }
+}
+
+// `iced_core` implements `Renderer for ()` only in debug builds.
+#[cfg(all(test, debug_assertions))]
+mod tests {
+    use iced_core::border::Radius;
+    use iced_core::{Color, Length, Size, Widget};
+
+    use super::{Shape, clamped_color, non_negative_radius, shape};
+    use crate::testing::FrameClock;
+    use crate::{Motion, curves::BOUNCY, key};
+
+    #[test]
+    fn a_shape_without_a_size_measures_nothing() {
+        let widget: Shape = shape();
+        assert_eq!(
+            Widget::<(), (), ()>::size(&widget),
+            Size::new(Length::Shrink, Length::Shrink)
+        );
+    }
+
+    #[test]
+    fn paint_is_clamped_to_what_the_renderer_accepts() {
+        // Struct literals: `Color::from_rgba` debug-asserts its ranges.
+        let wild = Color {
+            r: 1.35,
+            g: -0.1,
+            b: 0.5,
+            a: 2.0,
+        };
+        assert_eq!(
+            clamped_color(wild),
+            Color {
+                r: 1.0,
+                g: 0.0,
+                b: 0.5,
+                a: 1.0,
+            }
+        );
+
+        let negative = Radius {
+            top_left: -2.0,
+            top_right: 1.0,
+            bottom_right: -0.5,
+            bottom_left: 0.0,
+        };
+        assert_eq!(
+            non_negative_radius(negative),
+            Radius {
+                top_left: 0.0,
+                top_right: 1.0,
+                bottom_right: 0.0,
+                bottom_left: 0.0,
+            }
+        );
+    }
+
+    #[test]
+    fn a_bouncy_fill_overshoots_raw_but_never_after_clamping() {
+        let m = Motion::new();
+        let mut clock = FrameClock::new(&m);
+        let key = key!();
+        let _ = m.to(key, BOUNCY, Color::BLACK);
+        let fill = m.to(key, BOUNCY, Color::WHITE);
+
+        let mut overshot = false;
+        for _ in 0..200 {
+            let _ = clock.run(1);
+            let raw = fill.get();
+            overshot |= raw.r > 1.0;
+            let safe = clamped_color(raw);
+            assert!((0.0..=1.0).contains(&safe.r) && (0.0..=1.0).contains(&safe.a));
+        }
+        assert!(
+            overshot,
+            "BOUNCY should overshoot at least once, or the clamp is untested"
+        );
+    }
+
+    #[test]
+    fn a_shape_knows_when_any_of_its_values_moves() {
+        let m = Motion::new();
+        let key = key!();
+        let _ = m.to(key, BOUNCY, 0.0_f32);
+        let width = m.to(key, BOUNCY, 10.0_f32);
+
+        assert!(shape().border_width(width).is_animating());
+        assert!(!shape().fill(Color::WHITE).is_animating());
+    }
+}
+
+#[cfg(test)]
+/// Tests that drive the widget through `iced_test`.
+mod simulator_tests {
+    use std::time::Duration;
+
+    use iced::time::Instant;
+
+    use crate::{Curve, Motion, SpringParams, Tier, key};
+
+    /// A fast spring for tests; not the shipped `curves::SMOOTH`.
+    const FAST: Curve = Curve::spring(SpringParams::new(0.0, Duration::from_millis(300)));
+
+    /// The tier is what keeps a cheap animation cheap, and it is set by whichever
+    /// widget binds the value, so it is worth checking against the real widgets
+    /// rather than by calling `mark_tier` by hand.
+    #[test]
+    fn a_shape_marks_its_paint_and_its_layout_apart() {
+        use crate::widget::shape;
+        use iced::Color;
+
+        let m = Motion::new();
+
+        let fill_key = key!();
+        let size_key = key!();
+        let _ = m.to(fill_key, FAST, Color::BLACK);
+        let _ = m.to(size_key, FAST, 40.0_f32);
+
+        let fill = m.to(fill_key, FAST, Color::WHITE);
+        let side = m.to(size_key, FAST, 80.0_f32);
+
+        let element: iced::Element<'_, ()> = shape()
+            .width(side.clone())
+            .height(40.0)
+            .fill(fill.clone())
+            .into();
+
+        // Building the simulator lays the interface out (`UserInterface::build`
+        // computes the root layout), which is when a widget declares what it
+        // reads and where.
+        let _ui: iced_test::Simulator<'_, ()> = iced_test::Simulator::with_size(
+            iced::Settings::default(),
+            iced::Size::new(200.0, 200.0),
+            element,
+        );
+
+        assert_eq!(
+            fill.tier(),
+            Some(Tier::Paint),
+            "a colour is read in `draw`, so it costs a redraw and nothing more"
+        );
+        assert_eq!(
+            side.tier(),
+            Some(Tier::Layout),
+            "a width is read in `layout`, so it costs a relayout too"
+        );
+
+        let start = Instant::now();
+        let _ = m.tick(start);
+        let status = m.tick(start + Duration::from_millis(16));
+
+        assert!(status.animating);
+        assert!(
+            status.layout_invalid,
+            "the width is what makes this frame need a relayout"
+        );
+    }
+}

@@ -1,0 +1,35 @@
+[package]
+name = "iced_animate"
+description = "Tree-external animation engine for iced 0.14: keyed springs/eases resolved inside widgets"
+readme = "README.md"
+keywords = ["iced", "gui", "animation", "spring", "easing"]
+categories = ["gui", "graphics"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# The examples depend on the workspace-only `luminate_examples_support` crate, which
+# cargo strips from the package; they live in the repository only.
+exclude = ["examples/**"]
+
+[lints]
+workspace = true
+
+[dependencies]
+iced_core.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# `tiny-skia` gives `iced_test::Simulator` a headless renderer; `wgpu`, the
+# executor and the Linux window features exist only for `examples/tiers.rs`,
+# which `cargo test` builds too (dev-dependency features cannot be scoped to
+# one example, and iced 0.14 refuses to build without an executor).
+iced = { workspace = true, features = ["tiny-skia", "wgpu", "thread-pool", "x11", "wayland"] }
+iced_test.workspace = true
+luminate_examples_support.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

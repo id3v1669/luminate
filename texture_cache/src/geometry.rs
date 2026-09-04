@@ -1,0 +1,446 @@
+//! Pure geometry shared by [`Cached`](crate::Cached) and
+//! [`Pager`](crate::Pager): device-grid snapping, the composited transform,
+//! cursor mapping and the per-frame record decisions. Nothing here touches a
+//! renderer, so every rule has a unit test below.
+
+use iced_core::{Point, Rectangle, Size, Transformation, Vector, mouse};
+
+use crate::cached::PixelSnap;
+
+/// Scales closer to 1 than this are treated as exactly 1; scales closer to
+/// 0 than this are treated as 0 (no inverse). One constant so the
+/// "translation only" and "cursor mapping" decisions cannot disagree.
+pub(crate) const SCALE_EPS: f32 = 1e-4;
+
+/// Rounds a logical coordinate onto the device-pixel grid of `scale`.
+pub(crate) fn snap_to_grid(value: f32, scale: f32) -> f32 {
+    (value * scale).round() / scale
+}
+
+/// Linear interpolation: `from` at `t = 0`, `to` at `t = 1`.
+pub(crate) fn lerp(from: f32, to: f32, t: f32) -> f32 {
+    from + (to - from) * t
+}
+
+/// Composes a translation and a scale about the centre of `bounds`. A raw
+/// `Transformation::scale` is relative to the window origin and would slide
+/// the image toward the top-left corner.
+pub(crate) fn effective_transform(
+    offset: Vector,
+    factor: f32,
+    bounds: Rectangle,
+) -> Transformation {
+    let mut transform = Transformation::IDENTITY;
+
+    if offset != Vector::ZERO {
+        transform = transform * Transformation::translate(offset.x, offset.y);
+    }
+
+    if (factor - 1.0).abs() < SCALE_EPS {
+        return transform;
+    }
+
+    let centre_x = bounds.x + bounds.width * 0.5;
+    let centre_y = bounds.y + bounds.height * 0.5;
+
+    // Right-most applies first: shift the centre to the origin, scale, shift back.
+    transform
+        * Transformation::translate(centre_x, centre_y)
+        * Transformation::scale(factor)
+        * Transformation::translate(-centre_x, -centre_y)
+}
+
+/// `true` if `transform` is a pure 2D translation (identity linear part):
+/// the case in which snapping the origin to the device grid is lossless.
+pub(crate) fn is_translation_only(transform: &Transformation) -> bool {
+    let matrix: &[f32; 16] = transform.as_ref();
+    (matrix[0] - 1.0).abs() < SCALE_EPS
+        && (matrix[5] - 1.0).abs() < SCALE_EPS
+        && matrix[1].abs() < SCALE_EPS
+        && matrix[4].abs() < SCALE_EPS
+}
+
+/// Adjusts `user_transform` so that `origin` (the texture's top-left in
+/// layout space) lands on an integer device pixel, keeping the transform's
+/// scale. The whole texel grid then sits on the device grid and the resting
+/// frame samples at integer phase.
+pub(crate) fn snap_transform(
+    user_transform: Transformation,
+    origin: Point,
+    scale: f32,
+) -> Transformation {
+    let factor = user_transform.scale_factor();
+    let translation = user_transform.translation();
+    let device_x = (factor * origin.x + translation.x) * scale;
+    let device_y = (factor * origin.y + translation.y) * scale;
+    let snapped_x = device_x.round() / scale - factor * origin.x;
+    let snapped_y = device_y.round() / scale - factor * origin.y;
+    Transformation::translate(snapped_x, snapped_y) * Transformation::scale(factor)
+}
+
+/// Maps a cursor from the enclosing layout space into the content's
+/// untransformed space. A scale too close to zero has no inverse: the
+/// cursor becomes [`mouse::Cursor::Unavailable`] rather than NaN.
+pub(crate) fn translate_cursor(cursor: mouse::Cursor, transform: Transformation) -> mouse::Cursor {
+    let translation = transform.translation();
+    let scale = transform.scale_factor();
+
+    if scale.abs() < SCALE_EPS {
+        return mouse::Cursor::Unavailable;
+    }
+
+    let map_point =
+        |p: Point| Point::new((p.x - translation.x) / scale, (p.y - translation.y) / scale);
+
+    match cursor {
+        mouse::Cursor::Available(p) => mouse::Cursor::Available(map_point(p)),
+        mouse::Cursor::Levitating(p) => mouse::Cursor::Levitating(map_point(p)),
+        mouse::Cursor::Unavailable => mouse::Cursor::Unavailable,
+    }
+}
+
+/// Where and how large a texture is recorded and composited.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct CompositeGeometry {
+    /// Texture size in physical pixels.
+    pub physical: Size<u32>,
+    /// Scale used while recording (`device_scale * supersample`).
+    pub texture_scale: f32,
+    /// Where the (padded) texture is composited, in layout coordinates,
+    /// before the user transform. Its origin is also the point the record
+    /// translates by, so texture and viewport always agree.
+    pub cache_bounds: Rectangle,
+}
+
+/// Sizes the texture for `bounds` padded by `bleed` logical pixels on every
+/// side (so bilinear filtering at the edges does not clip anti-aliased
+/// pixels). With `snap_layout_origin` the layout part of the origin is
+/// pre-snapped to the device grid ([`PixelSnap::LayoutOnly`]).
+pub(crate) fn composite_geometry(
+    bleed: u32,
+    bounds: Rectangle,
+    scale: f32,
+    supersample: f32,
+    snap_layout_origin: bool,
+) -> CompositeGeometry {
+    // A renderer that reports no usable scale (zero, negative, NaN) records
+    // at 1:1 rather than producing an empty or infinite texture.
+    let scale = if scale > 0.0 && scale.is_finite() {
+        scale
+    } else {
+        1.0
+    };
+
+    let (origin_x, origin_y) = if snap_layout_origin {
+        (snap_to_grid(bounds.x, scale), snap_to_grid(bounds.y, scale))
+    } else {
+        (bounds.x, bounds.y)
+    };
+
+    let padded = Size::new(
+        bounds.width.ceil().max(1.0) + 2.0 * bleed as f32,
+        bounds.height.ceil().max(1.0) + 2.0 * bleed as f32,
+    );
+    let texture_scale = scale * supersample;
+    let physical = Size::new(
+        (padded.width * texture_scale).round().max(1.0) as u32,
+        (padded.height * texture_scale).round().max(1.0) as u32,
+    );
+    let cache_bounds = Rectangle {
+        x: origin_x - bleed as f32,
+        y: origin_y - bleed as f32,
+        width: physical.width as f32 / texture_scale,
+        height: physical.height as f32 / texture_scale,
+    };
+
+    CompositeGeometry {
+        physical,
+        texture_scale,
+        cache_bounds,
+    }
+}
+
+/// Whether the composited texel grid is snapped to the device grid this
+/// frame.
+pub(crate) fn snap_decision(
+    mode: PixelSnap,
+    has_live_scale: bool,
+    translation_only: bool,
+    at_rest: bool,
+) -> bool {
+    match mode {
+        PixelSnap::Always => true,
+        PixelSnap::Never | PixelSnap::LayoutOnly => false,
+        PixelSnap::Auto => !has_live_scale && translation_only && at_rest,
+    }
+}
+
+/// The supersample factor to record at this frame.
+pub(crate) fn record_supersample(base: f32, supersample_in_motion: bool, at_rest: bool) -> f32 {
+    if supersample_in_motion && !at_rest {
+        base.max(1.5)
+    } else {
+        base
+    }
+}
+
+/// The rectangle (in the enclosing layout space) a composite may paint: its
+/// transformed bounds intersected with the parent's clip. `None` when
+/// nothing is visible.
+pub(crate) fn composite_clip(
+    cache_bounds: Rectangle,
+    transform: Transformation,
+    viewport: &Rectangle,
+) -> Option<Rectangle> {
+    (cache_bounds * transform).intersection(viewport)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect(x: f32, y: f32, width: f32, height: f32) -> Rectangle {
+        Rectangle {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn snap_to_grid_rounds_in_device_pixels() {
+        assert_eq!(snap_to_grid(10.3, 2.0), 10.5);
+        assert_eq!(snap_to_grid(20.7, 2.0), 20.5);
+        assert_eq!(snap_to_grid(3.49, 1.0), 3.0);
+        assert_eq!(snap_to_grid(-0.6, 1.0), -1.0);
+    }
+
+    #[test]
+    fn lerp_hits_both_ends_and_the_middle() {
+        assert_eq!(lerp(100.0, 200.0, 0.0), 100.0);
+        assert_eq!(lerp(100.0, 200.0, 0.5), 150.0);
+        assert_eq!(lerp(100.0, 200.0, 1.0), 200.0);
+    }
+
+    #[test]
+    fn geometry_pads_by_bleed_and_scales_to_physical() {
+        let geometry = composite_geometry(2, rect(5.0, 7.0, 10.0, 20.0), 2.0, 1.0, false);
+        assert_eq!(geometry.physical, Size::new(28, 48));
+        assert_eq!(geometry.texture_scale, 2.0);
+        assert_eq!(geometry.cache_bounds, rect(3.0, 5.0, 14.0, 24.0));
+    }
+
+    #[test]
+    fn geometry_applies_supersample_to_texture_only() {
+        let geometry = composite_geometry(2, rect(0.0, 0.0, 10.0, 10.0), 1.0, 2.0, false);
+        assert_eq!(geometry.physical, Size::new(28, 28));
+        assert_eq!(geometry.texture_scale, 2.0);
+        assert_eq!(geometry.cache_bounds.width, 14.0);
+    }
+
+    #[test]
+    fn geometry_never_produces_zero_texture() {
+        let geometry = composite_geometry(0, rect(0.0, 0.0, 0.0, 0.0), 1.0, 1.0, false);
+        assert_eq!(geometry.physical, Size::new(1, 1));
+    }
+
+    #[test]
+    fn an_unusable_scale_falls_back_to_one() {
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            let geometry = composite_geometry(0, rect(0.0, 0.0, 10.0, 10.0), scale, 1.0, true);
+            assert_eq!(geometry.texture_scale, 1.0, "scale {scale}");
+            assert_eq!(geometry.physical, Size::new(10, 10), "scale {scale}");
+        }
+    }
+
+    #[test]
+    fn degenerate_bounds_still_yield_a_texture() {
+        for bounds in [
+            rect(-5.0, -5.0, -10.0, -10.0),
+            rect(f32::NAN, 0.0, f32::NAN, 4.0),
+        ] {
+            let geometry = composite_geometry(2, bounds, 1.0, 1.0, false);
+            assert!(
+                geometry.physical.width >= 1 && geometry.physical.height >= 1,
+                "{bounds:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn layout_only_snaps_only_the_bounds_origin() {
+        let bounds = rect(10.3, 20.7, 10.0, 10.0);
+        let snapped = composite_geometry(0, bounds, 2.0, 1.0, true);
+        // 10.3 * 2 = 20.6 -> 21 -> 10.5 ; 20.7 * 2 = 41.4 -> 41 -> 20.5
+        assert_eq!(
+            (snapped.cache_bounds.x, snapped.cache_bounds.y),
+            (10.5, 20.5)
+        );
+        let plain = composite_geometry(0, bounds, 2.0, 1.0, false);
+        assert_eq!((plain.cache_bounds.x, plain.cache_bounds.y), (10.3, 20.7));
+    }
+
+    #[test]
+    fn scaling_about_a_centre_leaves_that_centre_fixed() {
+        let bounds = rect(10.0, 20.0, 40.0, 20.0);
+        let centre = Point::new(30.0, 30.0);
+        let transform = effective_transform(Vector::ZERO, 2.0, bounds);
+        let moved = centre * transform;
+        assert!((moved.x - centre.x).abs() < 1e-4 && (moved.y - centre.y).abs() < 1e-4);
+        let corner = Point::new(bounds.x, bounds.y) * transform;
+        assert!((corner.x - (-10.0)).abs() < 1e-4 && (corner.y - 10.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_scale_within_epsilon_of_one_is_identity() {
+        let transform = effective_transform(
+            Vector::ZERO,
+            1.0 + SCALE_EPS / 2.0,
+            rect(0.0, 0.0, 10.0, 10.0),
+        );
+        assert!(is_translation_only(&transform));
+    }
+
+    #[test]
+    fn cursor_maps_through_the_inverse_transform() {
+        let transform = Transformation::translate(10.0, 5.0) * Transformation::scale(2.0);
+        let world = Point::new(30.0, 25.0);
+        let mouse::Cursor::Available(p) =
+            translate_cursor(mouse::Cursor::Available(world), transform)
+        else {
+            panic!("cursor kind changed")
+        };
+        let back = p * transform;
+        assert!((back.x - world.x).abs() < 1e-4 && (back.y - world.y).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_levitating_cursor_is_mapped_like_an_available_one() {
+        let transform = Transformation::translate(10.0, 5.0);
+        let mouse::Cursor::Levitating(p) =
+            translate_cursor(mouse::Cursor::Levitating(Point::new(30.0, 25.0)), transform)
+        else {
+            panic!("cursor kind changed")
+        };
+        assert_eq!(p, Point::new(20.0, 20.0));
+    }
+
+    #[test]
+    fn a_near_zero_scale_makes_the_cursor_unavailable() {
+        for scale in [0.0, SCALE_EPS / 10.0, -SCALE_EPS / 10.0] {
+            let transform = Transformation::scale(scale);
+            assert!(
+                matches!(
+                    translate_cursor(mouse::Cursor::Available(Point::new(3.0, 4.0)), transform),
+                    mouse::Cursor::Unavailable
+                ),
+                "scale {scale}"
+            );
+        }
+    }
+
+    #[test]
+    fn snapping_lands_the_texture_origin_on_a_device_pixel() {
+        let origin = Point::new(8.3, 18.7);
+        let scale = 2.0;
+        let user = Transformation::translate(0.37, -0.21);
+        let snapped = snap_transform(user, origin, scale);
+        let moved = origin * snapped;
+        let device = (moved.x * scale, moved.y * scale);
+        assert!(
+            (device.0 - device.0.round()).abs() < 1e-3,
+            "x on the grid: {device:?}"
+        );
+        assert!(
+            (device.1 - device.1.round()).abs() < 1e-3,
+            "y on the grid: {device:?}"
+        );
+        // …and the snap moved it by at most half a device pixel.
+        let unsnapped = origin * user;
+        assert!(((unsnapped.x - moved.x) * scale).abs() <= 0.5 + 1e-3);
+        assert!(((unsnapped.y - moved.y) * scale).abs() <= 0.5 + 1e-3);
+    }
+
+    #[test]
+    fn snapping_keeps_the_scale_and_lands_on_the_grid_when_scaled() {
+        let origin = Point::new(1.3, 2.4);
+        let user = Transformation::translate(1.1, 2.2) * Transformation::scale(2.0);
+        let snapped = snap_transform(user, origin, 2.0);
+        assert!((snapped.scale_factor() - 2.0).abs() < 1e-6);
+        let moved = origin * snapped;
+        assert!(((moved.x * 2.0) - (moved.x * 2.0).round()).abs() < 1e-3);
+        assert!(((moved.y * 2.0) - (moved.y * 2.0).round()).abs() < 1e-3);
+    }
+
+    #[test]
+    fn only_pure_translations_count_as_snappable() {
+        assert!(is_translation_only(&Transformation::translate(3.0, 4.0)));
+        assert!(is_translation_only(&Transformation::IDENTITY));
+        assert!(!is_translation_only(&Transformation::scale(1.5)));
+        assert!(!is_translation_only(
+            &(Transformation::translate(1.0, 1.0) * Transformation::scale(1.5))
+        ));
+    }
+
+    #[test]
+    fn snap_policy_truth_table() {
+        for has_live_scale in [false, true] {
+            for translation_only in [false, true] {
+                for at_rest in [false, true] {
+                    assert!(snap_decision(
+                        PixelSnap::Always,
+                        has_live_scale,
+                        translation_only,
+                        at_rest
+                    ));
+                    assert!(!snap_decision(
+                        PixelSnap::Never,
+                        has_live_scale,
+                        translation_only,
+                        at_rest
+                    ));
+                    assert!(!snap_decision(
+                        PixelSnap::LayoutOnly,
+                        has_live_scale,
+                        translation_only,
+                        at_rest
+                    ));
+                    assert_eq!(
+                        snap_decision(PixelSnap::Auto, has_live_scale, translation_only, at_rest),
+                        !has_live_scale && translation_only && at_rest
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn supersample_in_motion_only_raises_the_factor_in_motion() {
+        assert_eq!(record_supersample(1.0, false, false), 1.0);
+        assert_eq!(record_supersample(1.0, true, true), 1.0);
+        assert_eq!(record_supersample(1.0, true, false), 1.5);
+        assert_eq!(record_supersample(2.0, true, false), 2.0);
+    }
+
+    #[test]
+    fn the_composite_is_clipped_to_the_viewport() {
+        let cache_bounds = rect(0.0, 0.0, 100.0, 100.0);
+        let viewport = rect(0.0, 0.0, 200.0, 50.0);
+        let clip = composite_clip(
+            cache_bounds,
+            Transformation::translate(30.0, 0.0),
+            &viewport,
+        )
+        .expect("overlaps");
+        assert_eq!(clip, rect(30.0, 0.0, 100.0, 50.0));
+        assert!(
+            composite_clip(
+                cache_bounds,
+                Transformation::translate(0.0, 60.0),
+                &viewport
+            )
+            .is_none()
+        );
+    }
+}

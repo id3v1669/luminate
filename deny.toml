@@ -1,0 +1,34 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; transitive via wgpu" },
+  { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; transitive via iced" },
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; transitive via iced's text stack" },
+  { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained; transitive via iced's text stack" },
+]
+
+[licenses]
+version = 2
+allow = [
+  "MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause",
+  "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0", "CC0-1.0", "BSL-1.0", "0BSD",
+  "LGPL-2.1-or-later",
+  "OFL-1.1", # iced_luminate bundles the Inter font (LGPL-2.1-or-later AND OFL-1.1)
+  "NCSA", # libfuzzer-sys (dev/fuzz dependency of a transitive crate)
+]
+
+[bans]
+# wgpu/winit legitimately carry duplicate transitive versions.
+multiple-versions = "warn"
+wildcards = "deny"
+# `luminate_examples_support` is a path-only, never-published workspace member.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

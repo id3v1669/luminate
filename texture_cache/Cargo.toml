@@ -1,0 +1,88 @@
+[package]
+name = "iced_texture_cache"
+description = "Render-to-texture caching of widget subtrees for iced 0.14, without forking iced"
+readme = "README.md"
+keywords = ["iced", "gui", "wgpu", "cache", "texture"]
+categories = ["gui", "graphics", "rendering"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# The examples depend on the workspace-only `luminate_examples_support` crate, which
+# cargo strips from the package; they live in the repository only.
+exclude = ["examples/**"]
+
+[lints]
+workspace = true
+
+[dependencies]
+iced_core.workspace = true
+iced_graphics.workspace = true
+iced_renderer.workspace = true
+iced_wgpu = { workspace = true, optional = true }
+iced_tiny_skia = { workspace = true, optional = true }
+wgpu = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
+tiny-skia = { workspace = true, optional = true }
+iced_animate.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+# Tests and examples use the facade; the library never does. `x11`/`wayland`
+# are needed because winit refuses to build on Linux without a platform.
+iced = { workspace = true, features = [
+    "wgpu",
+    "tiny-skia",
+    "crisp",
+    "web-colors",
+    "thread-pool",
+    "x11",
+    "wayland",
+] }
+iced_test.workspace = true
+iced_runtime.workspace = true
+naga = { version = "27", features = ["wgsl-in"] }
+# The examples install a logger so `RUST_LOG=info` shows the adapter and
+# surface-format choice.
+env_logger = "0.11"
+luminate_examples_support = { workspace = true, features = ["texture"] }
+
+[features]
+default = ["wgpu", "tiny-skia", "crisp", "web-colors", "x11", "wayland"]
+# Backends. At least one is required; with both, `Renderer`/`Compositor` are
+# iced's fallback pair (wgpu when an adapter exists, tiny_skia otherwise).
+wgpu = ["dep:iced_wgpu", "dep:wgpu", "dep:bytemuck", "iced_renderer/wgpu"]
+# Software caches are composited through iced_tiny_skia's raster path, which
+# is behind its `image` feature.
+tiny-skia = ["dep:iced_tiny_skia", "dep:tiny-skia", "iced_renderer/tiny-skia", "iced_tiny_skia/image"]
+# Pass-throughs.
+crisp = ["iced_core/crisp"]
+web-colors = ["iced_renderer/web-colors"]
+x11 = ["iced_renderer/x11"]
+wayland = ["iced_renderer/wayland"]
+image = ["iced_renderer/image"]
+svg = ["iced_renderer/svg"]
+canvas = ["iced_renderer/geometry"]
+# Enables wgpu's validation layers (`InstanceFlags::debugging()`), like iced's
+# feature of the same name.
+strict-assertions = ["iced_renderer/strict-assertions"]
+
+[package.metadata.docs.rs]
+features = ["wgpu", "tiny-skia", "image", "svg", "canvas"]
+
+# Every example opens a window through the `iced` dev-dependency and needs a
+# backend; `wgpu` is the closest honest gate Cargo can express.
+[[example]]
+name = "compositor"
+required-features = ["wgpu"]
+
+[[example]]
+name = "pager"
+required-features = ["wgpu"]
+
+[[example]]
+name = "cache_benchmark"
+required-features = ["wgpu"]
