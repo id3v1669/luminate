@@ -1,0 +1,25 @@
+[package]
+name = "iced_page_router"
+description = "Type-erased page router for iced 0.14: history, lifecycle, snapshots and a shared-state registry"
+readme = "README.md"
+keywords = ["iced", "gui", "router", "navigation", "pages"]
+categories = ["gui"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+iced_core.workspace = true
+iced_runtime.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+iced = { workspace = true, features = ["tiny-skia", "thread-pool", "x11", "wayland"] }
+iced_test.workspace = true

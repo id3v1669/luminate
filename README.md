@@ -1,167 +1,111 @@
-# Rust UIKit for Iced
+# Luminate
 
-A flexible, native, runtime-switchable UI kit for [`iced`](https://github.com/iced-rs/iced) that allows you to define buttons, inputs, and other widgets in a reusable way.
+[![CI](https://github.com/sonata-ltd/luminate/actions/workflows/ci.yml/badge.svg)](https://github.com/sonata-ltd/luminate/actions/workflows/ci.yml)
+[![License: LGPL 2.1 or later](https://img.shields.io/badge/license-LGPL--2.1%2B-blue.svg)](https://github.com/sonata-ltd/luminate/blob/master/LICENSE)
+![MSRV 1.88](https://img.shields.io/badge/MSRV-1.88-orange.svg)
 
-Unlike typical iced widgets, this library allows you to:
+Animation, texture caching, page routing, and a design kit for
+[iced](https://iced.rs) 0.14. Each crate is a normal dependency and does not
+require an iced fork.
 
-- Directly emit application messages (`AppMessage`) from UIKit widgets.
-- Switch between implemented themes at runtime without incurring significant overhead.
-- Cache elements for zero-overhead rendering in hot paths.
-- Clean API for building UIs declaratively.
+| Crate | | | Purpose |
+|---|---|---|---|
+| `iced_animate` | [![crates.io](https://img.shields.io/crates/v/iced_animate.svg)](https://crates.io/crates/iced_animate) | [![docs.rs](https://docs.rs/iced_animate/badge.svg)](https://docs.rs/iced_animate) | Tree-external animation engine: keyed springs and eases, resolved inside widgets. |
+| `iced_texture_cache` | [![crates.io](https://img.shields.io/crates/v/iced_texture_cache.svg)](https://crates.io/crates/iced_texture_cache) | [![docs.rs](https://docs.rs/iced_texture_cache/badge.svg)](https://docs.rs/iced_texture_cache) | Render-to-texture caching (`Cached`, `Pager`) and the renderer/compositor that make it possible. |
+| `iced_page_router` | [![crates.io](https://img.shields.io/crates/v/iced_page_router.svg)](https://crates.io/crates/iced_page_router) | [![docs.rs](https://docs.rs/iced_page_router/badge.svg)](https://docs.rs/iced_page_router) | Type-erased page router with history, lifecycle, snapshots and a shared-state registry. |
+| `iced_luminate` | [![crates.io](https://img.shields.io/crates/v/iced_luminate.svg)](https://crates.io/crates/iced_luminate) | [![docs.rs](https://docs.rs/iced_luminate/badge.svg)](https://docs.rs/iced_luminate) | The Luminate design kit: theme, descriptors and widgets built on the three crates above. |
 
----
+## Getting started
 
-## Features
+Choose the crate that matches your needs:
 
-- **Generic `Kit`**: UIKit can be generic over your application `Message`.
-- **Runtime theme switching**: Choose different themes at runtime using a simple strategy.
-- **Message passthrough**: Send application-specific messages directly from UIKit widgets.
-- **Extensible**: Easily implement new themes without changing your application logic.
+### Animate stock widgets
 
----
-
-## Project State
-
-Todo list tracks implemented components and features from the [web version of AuraVibe UIKit.](https://github.com/sonata-ltd/launcher/tree/master/app/src/uikit/components)
-
-### Available Components
-
-- [x] Button
-- [ ] Card
-- [ ] CodeComponent
-- [ ] Dropdown
-- [ ] Grid
-- [ ] Indication
-- [x] Input
-    - [x] Label
-    - [x] Hint
-    - [x] Tooltip
-- [ ] Progress
-- [ ] Section
-- [ ] Separator
-- [x] Sidebar
-- [ ] Spinner
-- [ ] Window
-
-### Available Features
-
-- [ ] Animations
-    - [x] Physically correct RK4 spring implementation
-- [x] Router with `Message` encapsulation (inside `overview` example package)
-
----
-
-## Example
-
-### Build a simple interface using some UIKit widgets
-
-1. Reserve UI Kit cell in application state
-
-```rust
-struct Data {
-    input_content: String::new(),
-    uikit: Box<dyn for<'a> Kit<'a, Message>>,
-}
-```
-
-2. Define a `Message` enum:
-
-```rust
-enum Message {
-    Pressed,
-    InputChanged(String)
-}
-```
-
-3. Write a `new()` implementation:
-
-```rust
-impl Data {
-    fn new<K>(kit: K) -> (Self, Task<Message>)
-    where
-        K: for<'a> Kit<'a, Message> + 'static,
-    {
-        (
-            Self {
-                uikit: Box::new(kit),
-                input_content: String::new(),
-            },
-            Task::none(),
-        )
-    }
-}
-```
-
-4. Write a mapper implementation inside `Data` for clean building API:
-
-```rust
-impl Data {
-    // new() function...
-
-    fn kit_mapper(&self) -> UIMapper<'_, Message> {
-        UIMapper::new(&self.uikit)
-    }
-}
-```
-
-5. Pass chosen default UI Kit on application start:
-
-```rust
-fn main() -> iced::Result {
-    iced::application(move || Data::new(Sonata::new()), Data::update, Data::view)
-        .run()
-}
-```
-
-6. Build interface using simplest `button` and `input` widget:
-
-```rust
-impl Data {
-    // new(), kit_mapper() functions...
-
-    fn view(&self) -> Element<'_, Message> {
-        let kit = self.kit_mapper();
-
-        column![
-            kit.button().label("Action").on_press(Message::Pressed),
-            kit.input("Placeholder", &self.input_content).on_input(Message::InputChanged)
-        ]
-    }
-}
-```
-
-7. Define logic for these widgets:
-
-```rust
-impl Data {
-    // new(), kit_mapper() functions...
-
-    fn update(&mut self, message: Message) -> Task<Message> {
-        match message {
-            Message::Pressed => println!("Button pressed!"),
-            Message::InputChanged(val) => self.input_content = val,
-        }
-
-        Task::none()
-    }
-
-    // view() function...
-}
-```
-
-8. Run your application
-
-```sh
-cargo r
-```
-
----
-
-## Installation
-
-Add this crate to your `Cargo.toml`:
+Use springs and eases without sending a message for every frame:
 
 ```toml
 [dependencies]
-iced_auravibe = { git = "https://github.com/sonata-ltd/auravibe", branch = "master" }
+iced = "0.14"
+iced_animate = "0.1"
 ```
+
+### Cache and animate widget subtrees
+
+This crate provides the iced renderer, so views return
+`iced_texture_cache::Element`. It re-exports `iced_animate` as
+`iced_texture_cache::iced_animate`:
+
+```toml
+[dependencies]
+iced = "0.14"
+iced_texture_cache = "0.1"
+```
+
+### Add pages with history and lifecycle
+
+This crate does not depend on the animation or texture crates:
+
+```toml
+[dependencies]
+iced = "0.14"
+iced_page_router = "0.1"
+```
+
+### Use the whole kit
+
+One dependency re-exports `iced` and the other three crates:
+
+```toml
+[dependencies]
+iced_luminate = "0.1"
+```
+
+All four crates are released together with the same version.
+
+## Examples
+
+Run with `cargo run -p <crate> --example <name>`.
+
+| Crate | Example | Shows | Environment |
+|---|---|---|---|
+| `iced_animate` | `tiers` | paint and layout tiers, keys, sets, springs vs eases, enter/exit | `ANIM_AUTOPLAY=1` flips every 1.5 s |
+| `iced_texture_cache` | `compositor` | translate/scale/opacity of cached textures, auto-invalidate, nesting | `ANIM_AUTOPLAY=1` |
+| `iced_texture_cache` | `pager` | `Pager` sliding between pages of different heights | `ANIM_AUTOPLAY=1` |
+| `iced_texture_cache` | `cache_benchmark` | a heavy scene cached vs direct, `PixelSnap`, supersampling, the z-order rule (all knobs in-UI) | `BENCH_LOG=1` prints statistics to stderr |
+| `iced_luminate` | `overview` | all five descriptors (button hierarchies, an input with its error bubble, a collapsible sidebar, a card, a standalone pager), the theme, the motion tiers, a router with `Suspend` and `Drop` pages, a nested router | none |
+
+`ICED_BACKEND=wgpu|tiny-skia` forces a backend for any of them;
+`RUST_LOG=info` logs the adapter and surface format (the examples install
+`env_logger`; an application has to install a `log` backend itself).
+
+## Development
+
+```sh
+nix develop      # dev shell with the wgpu/winit system libraries
+./ci.sh          # fmt, clippy -D warnings, tests, docs, per-crate feature checks, cargo-deny, publish dry-run
+```
+
+`./ci.sh` mirrors the `stable`, Linux `per-crate`, `deny`, and
+`package` jobs of the GitHub workflow, including the multi-package
+`cargo publish --dry-run`. The workflow also runs `per-crate` on
+Linux, macOS and Windows, the MSRV (`msrv`) and `cargo-semver-checks`
+(`semver`) jobs, and `gpu`, which repeats the tests on wgpu over Mesa's
+software Vulkan driver.
+
+See [CONTRIBUTING.md](https://github.com/sonata-ltd/luminate/blob/master/CONTRIBUTING.md)
+and [RELEASING.md](https://github.com/sonata-ltd/luminate/blob/master/RELEASING.md).
+Design notes live in
+[docs/design](https://github.com/sonata-ltd/luminate/blob/master/docs/design).
+Measurements are in
+[texture_cache/BENCHMARKS.md](https://github.com/sonata-ltd/luminate/blob/master/texture_cache/BENCHMARKS.md);
+changes in [CHANGELOG.md](https://github.com/sonata-ltd/luminate/blob/master/CHANGELOG.md).
+
+## MSRV
+
+Rust 1.88, following iced 0.14. Breaking changes are acceptable before 1.0
+and are listed in the changelog.
+
+## License
+
+LGPL 2.1 or later. See [LICENSE](https://github.com/sonata-ltd/luminate/blob/master/LICENSE). `iced_luminate` bundles the Inter font under the
+SIL Open Font License 1.1 (`OFL.txt` next to the font files).

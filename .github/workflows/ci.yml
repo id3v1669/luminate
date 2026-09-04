@@ -1,0 +1,143 @@
+name: ci
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # iced_test picks its headless backend from this variable; the software
+  # backend is deterministic on every runner. The `gpu` job overrides it.
+  ICED_TEST_BACKEND: tiny-skia
+  LINUX_DEPS: >-
+    libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev
+    libxrandr-dev libvulkan-dev pkg-config
+
+jobs:
+  stable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo build --workspace --examples --all-features
+
+  per-crate:
+    # Each crate alone, so feature unification cannot hide a missing feature.
+    # Every crate must build on Linux, macOS and Windows.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      - run: cargo test -p iced_animate
+      - run: cargo check -p iced_animate --no-default-features
+      - run: cargo test -p iced_texture_cache
+      # One backend alone, under clippy so the cfg split stays warning-free.
+      # On Linux, softbuffer (behind iced_tiny_skia) needs a platform feature,
+      # so the tiny-skia-only step carries `x11` there.
+      - if: runner.os == 'Linux'
+        run: cargo clippy -p iced_texture_cache --all-targets --no-default-features --features tiny-skia,x11 -- -D warnings
+      - if: runner.os != 'Linux'
+        run: cargo clippy -p iced_texture_cache --all-targets --no-default-features --features tiny-skia -- -D warnings
+      - run: cargo clippy -p iced_texture_cache --all-targets --no-default-features --features wgpu -- -D warnings
+      - run: cargo test -p iced_page_router
+      - run: cargo clippy --all-targets -p iced_page_router --no-default-features -- -D warnings
+      - run: cargo test -p iced_luminate
+      # iced_luminate keeps the `iced` facade by design: it needs an executor
+      # (`thread-pool`) and, on Linux, a winit platform feature. The doc step
+      # catches links to feature-gated items.
+      - if: runner.os == 'Linux'
+        run: cargo clippy --all-targets -p iced_luminate --no-default-features --features thread-pool,tiny-skia,x11 -- -D warnings
+      - if: runner.os != 'Linux'
+        run: cargo clippy --all-targets -p iced_luminate --no-default-features --features thread-pool,tiny-skia -- -D warnings
+      - if: runner.os == 'Linux'
+        run: cargo doc -p iced_luminate --no-deps --no-default-features --features thread-pool,tiny-skia,x11
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - if: runner.os != 'Linux'
+        run: cargo doc -p iced_luminate --no-deps --no-default-features --features thread-pool,tiny-skia
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      - run: cargo check --workspace --all-targets --all-features
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
+      # One multi-package dry run: cargo resolves the workspace's path
+      # dependencies against each other (a single-crate dry run of anything
+      # but iced_animate fails until the others are on crates.io) and
+      # verifies every package builds from its packaged files.
+      - name: publish dry run (path dependencies resolved together)
+        run: cargo publish --dry-run -p iced_animate -p iced_texture_cache -p iced_page_router -p iced_luminate
+      - name: docs.rs-equivalent builds
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: |
+          cargo doc -p iced_animate --no-deps --all-features
+          cargo doc -p iced_texture_cache --no-deps --features wgpu,tiny-skia,image,svg,canvas
+          cargo doc -p iced_page_router --no-deps --all-features
+          cargo doc -p iced_luminate --no-deps --all-features
+
+  semver:
+    # No published baseline exists before 0.1.0; runs on version tags only.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          package: iced_animate, iced_texture_cache, iced_page_router, iced_luminate
+
+  gpu:
+    # The wgpu record/composite path on Mesa's software Vulkan driver
+    # (lavapipe): the `#[ignore]`d tests of iced_texture_cache need an
+    # adapter.
+    runs-on: ubuntu-latest
+    env:
+      ICED_TEST_BACKEND: wgpu
+      WGPU_BACKEND: vulkan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1 $LINUX_DEPS
+      - run: cargo test -p iced_texture_cache --all-features -- --include-ignored

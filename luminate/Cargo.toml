@@ -1,0 +1,87 @@
+[package]
+name = "iced_luminate"
+description = "Luminate UI kit for iced 0.14: data descriptors, a first-class theme and the Inter font, built on iced_animate, iced_texture_cache and iced_page_router"
+readme = "README.md"
+keywords = ["iced", "gui", "widgets", "animation", "ui-kit"]
+categories = ["gui"]
+# LGPL-2.1-or-later for the code. The bundled Inter font
+# (src/theme/typography/assets/) is SIL OFL-1.1; its licence text is OFL.txt
+# next to the font files.
+license = "LGPL-2.1-or-later AND OFL-1.1"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# The examples depend on the workspace-only `luminate_examples_support` crate, which
+# cargo strips from the package; they live in the repository only.
+exclude = ["examples/**"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# `svg` is always on: sidebar chevrons, button icons and the error-bubble
+# arrow are SVGs.
+iced = { workspace = true, features = ["svg"] }
+iced_animate.workspace = true
+iced_texture_cache = { workspace = true, features = ["svg"] }
+iced_page_router.workspace = true
+
+[dev-dependencies]
+# `selector` for `iced_test::Simulator::find`/`click`; every backend and
+# platform feature comes from this crate's own defaults.
+iced = { workspace = true, features = ["selector"] }
+iced_test.workspace = true
+luminate_examples_support = { workspace = true, features = ["texture"] }
+# The version iced 0.14's text stack resolves (Cargo.lock: 0.23.0);
+# `tests/fonts.rs` checks the bundled faces with the matcher the renderer uses.
+fontdb = "0.23"
+# The example installs a logger so `RUST_LOG=info` shows the adapter and
+# surface-format choice.
+env_logger = "0.11"
+
+[features]
+default = [
+    "bundled-font",
+    "wgpu",
+    "tiny-skia",
+    "crisp",
+    "web-colors",
+    "thread-pool",
+    "linux-theme-detection",
+    "x11",
+    "wayland",
+]
+# Embeds InterVariable.ttf and InterVariable-Italic.ttf (1.8 MB together) and
+# exposes `theme::typography::{FONT_INTER, FONT_INTER_ITALIC}`. Off,
+# `Luminate::fonts()` is empty and the application must install Inter itself.
+bundled-font = []
+# Pass-throughs to `iced` and, where the feature exists there, to
+# `iced_texture_cache`, so `default-features = false` here keeps control of
+# every backend, platform and colour feature.
+wgpu = ["iced/wgpu", "iced_texture_cache/wgpu"]
+tiny-skia = ["iced/tiny-skia", "iced_texture_cache/tiny-skia"]
+crisp = ["iced/crisp", "iced_texture_cache/crisp"]
+web-colors = ["iced/web-colors", "iced_texture_cache/web-colors"]
+thread-pool = ["iced/thread-pool"]
+linux-theme-detection = ["iced/linux-theme-detection"]
+x11 = ["iced/x11", "iced_texture_cache/x11"]
+wayland = ["iced/wayland", "iced_texture_cache/wayland"]
+# Always enabled through `[dependencies]`; listed so it can be named.
+svg = ["iced/svg", "iced_texture_cache/svg"]
+image = ["iced/image", "iced_texture_cache/image"]
+canvas = ["iced/canvas", "iced_texture_cache/canvas"]
+# Hot reloading of the iced application (`iced/hot`).
+hot = ["iced/hot"]
+strict-assertions = ["iced/strict-assertions", "iced_texture_cache/strict-assertions"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[[example]]
+name = "overview"
+path = "examples/overview/main.rs"
+# Opens a window (`wgpu` backend) and registers the bundled Inter faces.
+required-features = ["wgpu", "bundled-font"]

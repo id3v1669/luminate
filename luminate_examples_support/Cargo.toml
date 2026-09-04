@@ -1,0 +1,31 @@
+[package]
+name = "luminate_examples_support"
+description = "Scaffolding shared by the workspace examples; never published"
+version = "0.0.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# No backend, executor or platform feature is enabled here on purpose: the
+# example crate's own `iced` dev-dependency brings them through feature
+# unification, and enabling a backend of `iced_texture_cache` here would leak
+# it into the per-backend CI checks (`--no-default-features --features
+# tiny-skia`) of every crate that uses this scaffolding. Consequently the
+# crate builds only as part of an example or `--workspace` build.
+iced.workspace = true
+iced_animate.workspace = true
+iced_texture_cache = { workspace = true, optional = true }
+
+[features]
+# The three compositor-tier cells (`demo::{translate, scale, opacity}`);
+# enabled by the `iced_texture_cache` and `iced_luminate` examples, not by
+# `iced_animate`'s.
+texture = ["dep:iced_texture_cache"]

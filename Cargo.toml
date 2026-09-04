@@ -1,35 +1,57 @@
 [workspace]
-resolver = "3"
-members = [
-    "uikit",
-    "examples/*"
-]
-
-[workspace.dependencies]
-iced = { git = "https://github.com/iced-rs/iced", rev = "bc3a12c6840430a01b7300b21e5543d3c6e7a82e", default-features = false, features = [
-    "wgpu",
-    "advanced",
-    "canvas",
-    "image",
-    "web-colors",
-    "thread-pool",
-    "linux-theme-detection",
-    "x11",
-    "wayland",
-    "webgl",
-    "fira-sans",
-    "tiny-skia",
-    "svg"
-] }
+resolver = "2"
+members = ["animate", "texture_cache", "router", "luminate", "luminate_examples_support"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+license = "LGPL-2.1-or-later"
 authors = ["Quartix <qntlink@gmail.com>"]
-license = "LGPL-2.1"
-repository = "https://github.com/sonata-ltd/auravibe"
-rust-version = "1.91.1"
+repository = "https://github.com/sonata-ltd/luminate"
+homepage = "https://github.com/sonata-ltd/luminate"
+
+[workspace.dependencies]
+iced = { version = "0.14", default-features = false, features = ["advanced"] }
+iced_core = "0.14"
+iced_runtime = "0.14"
+iced_graphics = "0.14"
+iced_renderer = { version = "0.14", default-features = false }
+iced_wgpu = { version = "0.14", default-features = false }
+iced_tiny_skia = { version = "0.14", default-features = false }
+iced_test = "0.14"
+tiny-skia = "0.11" # older version to allign with iced14
+wgpu = "27" # older version to allign with iced14
+bytemuck = { version = "1", features = ["derive"] }
+log = "0.4"
+iced_animate = { version = "0.1.0", path = "animate" }
+iced_texture_cache = { version = "0.1.0", path = "texture_cache", default-features = false }
+iced_page_router = { version = "0.1.0", path = "router" }
+luminate_examples_support = { path = "luminate_examples_support" }
+
+# Every crate opts in with `[lints] workspace = true`; CI runs clippy with
+# `-D warnings` on top of this table.
+[workspace.lints.rust]
+missing_docs = "deny"
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
+must_use_candidate = "warn"
+doc_markdown = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+float_cmp = "allow"
+suboptimal_flops = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
